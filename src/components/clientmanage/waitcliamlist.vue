@@ -1,0 +1,267 @@
+<template>
+  <el-row class="warp">
+    <el-col :span="24" class="warp-breadcrum">
+      <el-breadcrumb separator="/">
+        <el-breadcrumb-item :to="{ path: '/' }"><b>首页</b></el-breadcrumb-item>
+        <el-breadcrumb-item>用户管理</el-breadcrumb-item>
+        <el-breadcrumb-item>待认领列表</el-breadcrumb-item>
+      </el-breadcrumb>
+    </el-col>
+
+    <el-col :span="24" class="warp-main">
+      <div class="filter-container">
+        <!--<el-input clearable @keyup.enter.native="handleFilter" v-model="search.inviteCode" style="width: 200px;"-->
+        <!--class="filter-item"-->
+        <!--placeholder="代理编号">-->
+        <!--</el-input>-->
+        <el-input clearable @keyup.enter.native="handleFilter" v-model="search.cusMobile" style="width: 200px;"
+                  class="filter-item"
+                  placeholder="手机号">
+        </el-input>
+        <el-date-picker
+          v-model="timeQuantum"
+          type="datetimerange"
+          :picker-options="pickerOptions2"
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          align="right">
+        </el-date-picker>
+        <el-button @click.stop="on_refresh" class="filter-item" size="small" style="font-size: 16px;" plain v-waves
+                   icon="el-icon-refresh"></el-button>
+        <el-button class="filter-item" style="width: 90px;" type="primary" v-waves icon="el-icon-search"
+                   @click="handleFilter">
+          搜索
+        </el-button>
+      </div>
+      <!--列表-->
+      <el-table :data="userAuditlist" border highlight-current-row element-loading-text="拼命加载中" v-loading="listLoading"
+                style="width: 100%;">
+        <!--<el-table-column type="selection" width="55"></el-table-column>-->
+        <!--<el-table-column type="index" width="60"></el-table-column>-->
+        <el-table-column prop="cusId" label="用户编号"></el-table-column>
+        <el-table-column prop="inviteCode" label="代理编号"></el-table-column>
+        <el-table-column prop="cusName" label="姓名"></el-table-column>
+        <el-table-column prop="cusAge" label="年龄"></el-table-column>
+        <el-table-column prop="cusMobile" label="手机号"></el-table-column>
+        <!--<el-table-column prop="createTime" label="注册时间" width="160"></el-table-column>-->
+        <el-table-column prop="createTime" label="进件时间" width="160"></el-table-column>
+
+        <el-table-column label="操作类型" width="320">
+          <template slot-scope="scope">
+            <!--<el-button size="small" type="primary" plain @click="userinfo(scope.row)">查看档案-->
+            </el-button>
+            <el-button size="small" type="primary" :disabled="isBtnTg(scope.row)" @click="reject(scope.row)">认领
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!--工具条-->
+      <el-col :span="24" class="toolbar pad-a">
+        <!--分页-->
+        <div v-show="userAuditlist.length" style="float: right" class="pagination-container">
+          <el-pagination
+            background
+            @current-change="handleCurrentChange"
+            :current-page.sync="listQuery.limit"
+            :page-size="listQuery.page"
+            layout="prev, pager, next, jumper"
+            :total="total">
+          </el-pagination>
+        </div>
+      </el-col>
+    </el-col>
+  </el-row>
+</template>
+<script>
+  import util from '../../common/util'
+  import waves from '@/common/waves/index.js' // 水波纹指令
+  import Api from '@/api';
+  import sessionStorage from '@/storage/sessionStorage'
+  import proConfig from '../../config';
+
+  export default {
+    directives: {
+      waves
+    },
+    data() {
+      return {
+        search: {
+//          inviteCode: '',
+          auditUserName: '',
+          cusMobile: ''
+        },
+        pickerOptions2: {
+          shortcuts: [
+            {
+              text: "最近一周",
+              onClick(picker) {
+                const end = new Date();
+                const start = new Date();
+                start.setTime(start.getTime() - 3600 * 1000 * 24 * 7);
+                picker.$emit("pick", [start, end]);
+              }
+            },
+            {
+              text: "最近一个月",
+              onClick(picker) {
+                const end = new Date();
+                const start = new Date();
+                start.setTime(start.getTime() - 3600 * 1000 * 24 * 30);
+                picker.$emit("pick", [start, end]);
+              }
+            },
+            {
+              text: "最近三个月",
+              onClick(picker) {
+                const end = new Date();
+                const start = new Date();
+                start.setTime(start.getTime() - 3600 * 1000 * 24 * 90);
+                picker.$emit("pick", [start, end]);
+              }
+            }
+          ]
+        },
+        timeQuantum: "", //时间段
+        userAuditlist: [],
+        total: 0,
+        listQuery: {
+          page: 10,
+          limit: 1,
+          type: undefined,
+          startTime: '',
+          endTime: '',
+        },
+        listLoading: false,
+      }
+    },
+
+    created() {
+      this.cusAuthList();
+    },
+    methods: {
+      //分页
+      handleCurrentChange(val) {
+        this.listQuery.limit = val;
+        this.cusAuthList()
+      },
+      handleFilter() {
+        this.cusAuthList()
+      },
+      on_refresh() {
+//        this.search.inviteCode = '';
+        this.search.auditUserName = '';
+        this.search.cusMobile = '';
+        this.timeQuantum = null;
+        this.cusAuthList()
+      },
+      //获取参数列表-
+      cusAuthList() {
+        let startTime = null;
+        let endTime = null;
+        if (this.timeQuantum) {
+          startTime = util.formatDate.format(
+            new Date(this.timeQuantum[0]),
+            "yyyy-MM-dd hh:mm:ss"
+          );
+          endTime = util.formatDate.format(
+            new Date(this.timeQuantum[1]),
+            "yyyy-MM-dd hh:mm:ss"
+          );
+        }
+        let para = {
+          pSize: this.listQuery.page,
+          pNum: this.listQuery.limit,
+          auditStatus: 1,
+          cusMobile: this.search.cusMobile,
+          startTime: startTime || "",
+          endTime: endTime || ""
+        };
+        this.listLoading = true;
+        Api.testApi.cusAuthList(util.checkBe(para)).then(res => {
+          if (res.code == '0000') {
+            if (res.data) {
+              if (res.data.creditEvs) {
+                let resData = res.data.creditEvs;
+                this.total = res.data.total;
+                for (let i = 0; i < resData.length; i++) {
+                  resData[i].createTime = util.formatDate.format(new Date(resData[i].createTime), 'yyyy-MM-dd hh:mm:ss')
+                }
+                this.userAuditlist = res.data.creditEvs;
+                this.listLoading = false;
+              }
+            } else {
+              this.userAuditlist = [];
+              this.listLoading = false
+            }
+          }
+        })
+      },
+      //认领
+      reject(row) {
+        this.$confirm('确认认领吗?', '提示', {type: 'warning'}).then(() => {
+          let para = {cusId: row.cusId};
+          Api.testApi.claimCustomer(para).then(res => {
+            if (res.code == '0000') {
+              this.$message({
+                message: '认领成功',
+                type: 'success'
+              });
+              this.cusAuthList();
+            }
+          });
+        }).catch(() => {
+        });
+      },
+      userinfo(row) {
+        sessionStorage.$setSessionStorageByName("cusId", row.cusId);
+        sessionStorage.$removeSessionStorageByName("auditStatus", row.auditStatus);
+        sessionStorage.$setSessionStorageByName("auditStatus", row.auditStatus);
+        window.open(window.location.origin + proConfig.openurl)
+      },
+      //返回表格内标签的类型
+      returnTagType(status) {
+        switch (status) {
+          case 1:
+            return 'success';
+          case 2:
+            return 'info';
+          case 3:
+            return '';
+          case 4:
+            return 'danger'
+        }
+      },
+      //返回表格内标签的内容
+      returnTagValue(status) {
+        switch (status) {
+          case 1:
+            return '待认领';
+          case 2:
+            return '待审核'
+          case 3:
+            return '已通过'
+          case 4:
+            return '已拒绝'
+        }
+      },
+      //操作按钮是否可以点击
+      isBtnTg(row) {
+        return row.auditStatus == 1 ? false : true;
+      },
+    },
+    components: {},
+  }
+</script>
+
+<style type="text/scss" lang="scss" scoped>
+  .demo-table-expand label {
+    font-weight: bold;
+  }
+
+  .filter-container {
+    padding: 20px 0;
+  }
+
+</style>
